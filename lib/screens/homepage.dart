@@ -1,6 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/widgets.dart';
 
+List<TaskItem> buildTaskItems(List<String> taskNames) {
+  List<TaskItem> items = List();
+  for (var i = 0; i < taskNames.length; i++) {
+    items.add(
+      TaskItem(i, taskNames[i], "", null, false),
+    );
+  }
+  return items;
+}
+
+List<String> initTaskNames = [
+  "Buy eggs",
+  "Do laundry",
+  "Buy more eggs",
+  null,
+];
+
 class Homepage extends StatefulWidget {
   @override
   _HomepageState createState() => _HomepageState();
@@ -8,55 +25,30 @@ class Homepage extends StatefulWidget {
 
 class _HomepageState extends State<Homepage> {
   final GlobalKey<AnimatedListState> listKey = GlobalKey<AnimatedListState>();
-  List<TaskItem> _taskItems;
-  List<String> _taskNames;
-
-  void initState() {
-    super.initState();
-    _taskNames = [
-      "Buy eggs",
-      "Do laundry",
-      "Buy more eggs",
-      null,
-    ];
-    _taskItems = buildTaskItems(_taskNames);
-  }
-
-  List<TaskItem> buildTaskItems(List<String> taskNames) {
-    List<TaskItem> items = List();
-    for (var i = 0; i < taskNames.length; i++) {
-      items.add(
-        TaskItem(i, taskNames[i], "", null, false),
-      );
-    }
-    return items;
-  }
+  List<TaskItem> _taskItems = buildTaskItems(initTaskNames);
 
   void _removeItem(int index) {
+    final TaskItem item = _taskItems.removeAt(index);
     AnimatedListRemovedItemBuilder builder = (context, animation) {
-      return _buildItem(index, animation);
+      return _buildItem(item, index, animation);
     };
     listKey.currentState.removeItem(index, builder);
   }
 
-  Widget _buildItem(int index, Animation animation) {
-    // return SlideTransition(
-    //   position: Tween<Offset>(
-    //     begin: const Offset(-1, 0),
-    //     end: Offset(0, 0),
-    //   ).animate(animation),
-    //   child: TaskItemWidget(
-    //       index: index,
-    //       title: _taskItems[index].name,
-    //       onItemRemoved: _removeItem),
-    // );
+  void _addItem(int index, String value) {
+    listKey.currentState.insertItem(index);
+    _taskItems.add(TaskItem(_taskItems.length, value, "", null, false));
+  }
+
+  Widget _buildItem(TaskItem item, int index, Animation animation) {
     return SizeTransition(
       axis: Axis.vertical,
       sizeFactor: animation,
       child: TaskItemWidget(
-          index: index,
-          title: _taskItems[index].name,
-          onItemRemoved: _removeItem),
+          item: item,
+          onItemRemoved: () {
+            _removeItem(index);
+          }),
     );
   }
 
@@ -78,13 +70,12 @@ class _HomepageState extends State<Homepage> {
                 Expanded(
                     child: Container(
                         padding: EdgeInsets.only(top: 30.0),
-                        child:
-                            // TaskListWidget(taskItems: _taskItems ?? [], key: listKey),
-                            AnimatedList(
+                        child: AnimatedList(
                           key: listKey,
                           initialItemCount: _taskItems.length,
                           itemBuilder: (context, index, animation) {
-                            return _buildItem(index, animation);
+                            return _buildItem(
+                                _taskItems[index], index, animation);
                           },
                         )))
               ],
@@ -97,15 +88,7 @@ class _HomepageState extends State<Homepage> {
               context: context,
               builder: (BuildContext context) {
                 return NewTaskFormWidget(onFormSubmit: (String value) {
-                  setState(() {
-                    List<String> taskNames = List.from(_taskNames);
-                    taskNames.add(value);
-
-                    List<TaskItem> taskItems = buildTaskItems(taskNames);
-                    _taskNames = taskNames;
-                    _taskItems = taskItems;
-                  });
-
+                  _addItem(_taskItems.length, value);
                   Navigator.of(context).pop();
                 });
               });

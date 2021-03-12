@@ -20,14 +20,13 @@ class TaskItem {
 }
 
 class TaskItemWidget extends StatefulWidget {
-  final int index;
-  final String title;
+  final TaskItem item;
   final Function onItemRemoved;
 
   @override
   _TaskItemWidgetState createState() => _TaskItemWidgetState();
 
-  TaskItemWidget({this.index, this.title, this.onItemRemoved});
+  TaskItemWidget({this.item, this.onItemRemoved});
 }
 
 class _TaskItemWidgetState extends State<TaskItemWidget> {
@@ -56,7 +55,8 @@ class _TaskItemWidgetState extends State<TaskItemWidget> {
                     _checked = true;
                     Timer timer =
                         new Timer(new Duration(milliseconds: 450), () {
-                      widget.onItemRemoved(widget.index);
+                      widget.onItemRemoved();
+                      _checked = false;
                     });
                   });
                 }),
@@ -64,7 +64,7 @@ class _TaskItemWidgetState extends State<TaskItemWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.title ?? "(Unnamed Task)",
+                  widget.item.name ?? "(Unnamed Task)",
                   style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.w500),
                 ),
                 Text(
@@ -160,28 +160,26 @@ class _NewTaskFormWidgetState extends State<NewTaskFormWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-        padding: MediaQuery.of(context).viewInsets,
-        child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 22.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  autofocus: true,
-                  controller: _controller,
-                  onSubmitted: (String value) {},
-                  decoration: InputDecoration(labelText: "Enter new task"),
-                ),
-                Container(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                        onPressed: () {
-                          widget.onFormSubmit(_controller.text);
-                        },
-                        icon: Icon(Icons.check),
-                        label: Text('Save')))
-              ],
-            )));
+    return Container(
+        padding: EdgeInsets.symmetric(horizontal: 22.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              autofocus: true,
+              controller: _controller,
+              onSubmitted: (String value) {},
+              decoration: InputDecoration(labelText: "Enter new task"),
+            ),
+            Container(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                    onPressed: () {
+                      widget.onFormSubmit(_controller.text);
+                    },
+                    icon: Icon(Icons.check),
+                    label: Text('Save')))
+          ],
+        ));
   }
 }
