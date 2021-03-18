@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'dart:async';
+import 'package:intl/intl.dart';
 
 class TaskListNameItem {
   int value;
@@ -9,82 +9,13 @@ class TaskListNameItem {
   TaskListNameItem(this.value, this.name);
 }
 
-class TaskItem {
-  int index;
-  String name;
-  String description;
-  DateTime dueDate;
-  bool complete;
-
-  TaskItem(
-      this.index, this.name, this.description, this.dueDate, this.complete);
-}
-
-class TaskItemWidget extends StatefulWidget {
-  final TaskItem item;
-  final Function onItemRemoved;
-
-  @override
-  _TaskItemWidgetState createState() => _TaskItemWidgetState();
-
-  TaskItemWidget({this.item, this.onItemRemoved});
-}
-
-class _TaskItemWidgetState extends State<TaskItemWidget> {
-  bool _checked;
-
-  @override
-  void initState() {
-    super.initState();
-    _checked = false;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(
-          vertical: 22.0,
-          horizontal: 8.0,
-        ),
-        child: Row(
-          children: [
-            Checkbox(
-                value: _checked,
-                onChanged: (value) {
-                  setState(() {
-                    _checked = true;
-                    Timer timer =
-                        new Timer(new Duration(milliseconds: 450), () {
-                      widget.onItemRemoved();
-                      _checked = false;
-                    });
-                  });
-                }),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.item.name ?? "(Unnamed Task)",
-                  style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.w500),
-                ),
-                Text(
-                  "This is a test description",
-                  style: TextStyle(fontSize: 15.0, color: Colors.grey),
-                ),
-              ],
-            )
-          ],
-        ));
-  }
-}
-
 class DropdownWidget extends StatefulWidget {
   final List<QueryDocumentSnapshot> tasklistsDocs;
+  final Function onTaskListSelected;
   @override
   _DropdownWidgetState createState() => _DropdownWidgetState();
 
-  DropdownWidget({this.tasklistsDocs});
+  DropdownWidget({this.tasklistsDocs, this.onTaskListSelected});
 }
 
 class _DropdownWidgetState extends State<DropdownWidget> {
@@ -123,7 +54,7 @@ class _DropdownWidgetState extends State<DropdownWidget> {
               docs[index]['name'],
               style: TextStyle(fontSize: 25.0),
             )),
-        value: TaskListNameItem(index + 1, docs[index]['name']),
+        value: TaskListNameItem(index, docs[index]['name']),
       );
     }).toList();
   }
@@ -136,9 +67,12 @@ class _DropdownWidgetState extends State<DropdownWidget> {
         value: _selectedItem,
         items: _dropdownMenuItems,
         onChanged: (value) {
-          setState(() {
-            _selectedItem = value;
-          });
+          if (value.value != _selectedItem.value) {
+            setState(() {
+              _selectedItem = value;
+            });
+            widget.onTaskListSelected(value.value);
+          }
         },
       ),
     ));
@@ -155,16 +89,56 @@ class NewTaskFormWidget extends StatefulWidget {
 }
 
 class _NewTaskFormWidgetState extends State<NewTaskFormWidget> {
-  TextEditingController _controller;
+  TextEditingController _taskTitleController;
+  TextEditingController _taskDescriptionController;
+  bool _isDescriptionSelected;
+  bool _isDueDateAdded;
+  FocusNode _taskDescriptionNode;
+  DateTime _dueDate;
+  bool _isRecurring;
 
   void initState() {
     super.initState();
-    _controller = TextEditingController();
+    _taskTitleController = TextEditingController();
+    _taskDescriptionController = TextEditingController();
+    _taskDescriptionNode = new FocusNode();
+    _isDescriptionSelected = false;
+    _isDueDateAdded = false;
+    _dueDate = null;
+    _isRecurring = false;
   }
 
   void dispose() {
-    _controller.dispose();
+    _taskTitleController.dispose();
+    _taskDescriptionController.dispose();
+    _taskDescriptionNode.dispose();
     super.dispose();
+  }
+
+  _selectDate(BuildContext context) async {
+    final DateTime picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(), // Refer step 1
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2050),
+    );
+    if (picked != null) {
+      setState(() {
+        _dueDate = picked;
+      });
+      _selectTime(context);
+    }
+  }
+
+  _selectTime(BuildContext context) async {
+    final TimeOfDay picked =
+        await showTimePicker(context: context, initialTime: TimeOfDay.now());
+
+    if (picked != null) {
+      _dueDate = DateTime(_dueDate.year, _dueDate.month, _dueDate.day,
+          picked.hour, picked.minute);
+      _isDueDateAdded = true;
+    }
   }
 
   @override
@@ -176,18 +150,91 @@ class _NewTaskFormWidgetState extends State<NewTaskFormWidget> {
           children: [
             TextField(
               autofocus: true,
-              controller: _controller,
+              controller: _taskTitleController,
               onSubmitted: (String value) {},
               decoration: InputDecoration(labelText: "Enter new task"),
             ),
+            _isDescriptionSelected
+                ? TextField(
+                    focusNode: _taskDescriptionNode,
+                    controller: _taskDescriptionController,
+                    onSubmitted: (String value) {},
+                    decoration:
+                        InputDecoration(labelText: "Enter task description"),
+                  )
+                : Container(),
+            Container(
+                padding: EdgeInsets.only(top: 8.0),
+                child: Row(
+                  children: [
+                    IconButton(
+                        icon: Icon(
+                          Icons.description_outlined,
+                          color: _isDescriptionSelected
+                              ? Colors.blueAccent
+                              : Colors.grey,
+                          size: 28.0,
+                        ),
+                        onPressed: () {
+                          _taskDescriptionNode.requestFocus();
+                          setState(() {
+                            _isDescriptionSelected = !_isDescriptionSelected;
+                          });
+                        }),
+                    IconButton(
+                        icon: Icon(
+                          Icons.event_available_outlined,
+                          color:
+                              _isDueDateAdded ? Colors.blueAccent : Colors.grey,
+                          size: 28.0,
+                        ),
+                        onPressed: () {
+                          _selectDate(context);
+                        }),
+                    _isDueDateAdded
+                        ? Row(children: [
+                            OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                    shape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.all(
+                                            Radius.circular(10)))),
+                                onPressed: () {
+                                  setState(() {
+                                    _isDueDateAdded = false;
+                                  });
+                                },
+                                icon: Icon(Icons.clear_outlined),
+                                label: Text(DateFormat('MMM d, h:mm a')
+                                    .format(_dueDate))),
+                            IconButton(
+                                icon: Icon(Icons.repeat_outlined),
+                                color: _isRecurring
+                                    ? Colors.blueAccent
+                                    : Colors.grey,
+                                onPressed: () {
+                                  setState(() {
+                                    _isRecurring = !_isRecurring;
+                                  });
+                                })
+                          ])
+                        : Container()
+                  ],
+                )),
             Container(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                    onPressed: () {
-                      widget.onFormSubmit(_controller.text);
-                    },
-                    icon: Icon(Icons.check),
-                    label: Text('Save')))
+                  onPressed: () {
+                    widget.onFormSubmit(
+                        _taskTitleController.text,
+                        _isDescriptionSelected
+                            ? _taskDescriptionController.text
+                            : "",
+                        DateTime.now(),
+                        _isRecurring);
+                  },
+                  label: Text('Save'),
+                  icon: Icon(Icons.check),
+                ))
           ],
         ));
   }

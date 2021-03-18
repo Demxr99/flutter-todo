@@ -2,23 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_application_1/widgets.dart';
 // import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
-List<TaskItem> buildTaskItems(List<String> taskNames) {
-  List<TaskItem> items = [];
-  for (var i = 0; i < taskNames.length; i++) {
-    items.add(
-      TaskItem(i, taskNames[i], "", null, false),
-    );
-  }
-  return items;
-}
-
-List<String> initTaskNames = [
-  "Buy eggs",
-  "Do laundry",
-  "Buy more eggs",
-  null,
-];
+import 'package:flutter_application_1/widgets/task_list.dart';
 
 class Homepage extends StatefulWidget {
   final String userId;
@@ -30,32 +14,21 @@ class Homepage extends StatefulWidget {
 }
 
 class _HomepageState extends State<Homepage> {
-  final GlobalKey<AnimatedListState> listKey = GlobalKey<AnimatedListState>();
-  List<TaskItem> _taskItems = buildTaskItems(initTaskNames);
+  int _selectedTaskListIndex;
+  String _selectedTaskListId;
 
-  void _removeItem(int index) {
-    final TaskItem item = _taskItems.removeAt(index);
-    AnimatedListRemovedItemBuilder builder = (context, animation) {
-      return _buildItem(item, index, animation);
-    };
-    listKey.currentState.removeItem(index, builder);
+  void initState() {
+    super.initState();
+    _selectedTaskListIndex = 0;
+    _selectedTaskListId = null;
   }
 
-  void _addItem(int index, String value) {
-    listKey.currentState.insertItem(index);
-    _taskItems.add(TaskItem(_taskItems.length, value, "", null, false));
-  }
+  void _addItem(int index, String value) {}
 
-  Widget _buildItem(TaskItem item, int index, Animation animation) {
-    return SizeTransition(
-      axis: Axis.vertical,
-      sizeFactor: animation,
-      child: TaskItemWidget(
-          item: item,
-          onItemRemoved: () {
-            _removeItem(index);
-          }),
-    );
+  void onTaskListSelected(int taskListIndex) {
+    setState(() {
+      _selectedTaskListIndex = taskListIndex;
+    });
   }
 
   @override
@@ -64,6 +37,9 @@ class _HomepageState extends State<Homepage> {
         .collection('users')
         .doc(widget.userId)
         .collection('tasklists');
+
+    print(_selectedTaskListIndex);
+
     return StreamBuilder<QuerySnapshot>(
         stream: tasklists.snapshots(),
         builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
@@ -72,7 +48,34 @@ class _HomepageState extends State<Homepage> {
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Text("Loading");
+            return Scaffold(
+                body: SafeArea(
+                    child: Center(
+                        child: Container(
+              child: CircularProgressIndicator(),
+              padding: EdgeInsets.symmetric(horizontal: 50.0),
+            ))));
+          }
+
+          CollectionReference tasks = FirebaseFirestore.instance
+              .collection('users')
+              .doc(widget.userId)
+              .collection('tasklists')
+              .doc(snapshot.data.docs[_selectedTaskListIndex].id)
+              .collection('tasks');
+
+          Future<void> addTask(String title, String description, DateTime date,
+              bool isRecurring) {
+            return tasks
+                .add({
+                  'title': title,
+                  'description': description,
+                  'due_date': date,
+                  'complete': false,
+                  'recurring': isRecurring
+                })
+                .then((value) => print('Task added'))
+                .catchError((error) => print("Failed to add task: $error"));
           }
 
           return Scaffold(
@@ -81,25 +84,20 @@ class _HomepageState extends State<Homepage> {
                   padding: EdgeInsets.all(13.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.max,
                     children: [
                       Row(children: [
                         Image.asset('assets/images/tick.png', scale: 18),
                         Container(
                             padding: EdgeInsets.only(left: 8.0),
                             child: DropdownWidget(
-                                tasklistsDocs: snapshot.data.docs))
+                                tasklistsDocs: snapshot.data.docs,
+                                onTaskListSelected: onTaskListSelected))
                       ]),
-                      Expanded(
-                          child: Container(
-                              padding: EdgeInsets.only(top: 30.0),
-                              child: AnimatedList(
-                                key: listKey,
-                                initialItemCount: _taskItems.length,
-                                itemBuilder: (context, index, animation) {
-                                  return _buildItem(
-                                      _taskItems[index], index, animation);
-                                },
-                              )))
+                      TaskListWidget(
+                          userId: widget.userId,
+                          selectedTaskListId:
+                              snapshot.data.docs[_selectedTaskListIndex].id)
                     ],
                   )),
             ),
@@ -109,8 +107,9 @@ class _HomepageState extends State<Homepage> {
                     isScrollControlled: true,
                     context: context,
                     builder: (BuildContext context) {
-                      return NewTaskFormWidget(onFormSubmit: (String value) {
-                        _addItem(_taskItems.length, value);
+                      return NewTaskFormWidget(onFormSubmit: (String title,
+                          String description, DateTime date, bool isRecurring) {
+                        addTask(title, description, date, isRecurring);
                         Navigator.of(context).pop();
                       });
                     });
