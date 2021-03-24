@@ -175,7 +175,10 @@ class _HomepageState extends State<Homepage> {
                   spacing: 20.0,
                   children: [
                     IconButton(
-                        icon: Icon(Icons.menu_outlined), onPressed: () {}),
+                        icon: Icon(
+                          Icons.menu_outlined,
+                        ),
+                        onPressed: () {}),
                     IconButton(
                         icon: Icon(Icons.search_outlined), onPressed: () {}),
                     IconButton(

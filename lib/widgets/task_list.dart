@@ -19,12 +19,13 @@ class TaskItem {
 
 class TaskItemWidget extends StatefulWidget {
   final TaskItem item;
-  final Function onItemRemoved;
+  final Function onTaskCompleted;
+  final Function onTaskDeleted;
 
   @override
   _TaskItemWidgetState createState() => _TaskItemWidgetState();
 
-  TaskItemWidget({this.item, this.onItemRemoved});
+  TaskItemWidget({this.item, this.onTaskCompleted, this.onTaskDeleted});
 }
 
 class _TaskItemWidgetState extends State<TaskItemWidget> {
@@ -48,7 +49,7 @@ class _TaskItemWidgetState extends State<TaskItemWidget> {
         return 'E, h:mm a';
         break;
       default:
-        return 'MMM d';
+        return 'E, MMM d';
     }
   }
 
@@ -61,56 +62,63 @@ class _TaskItemWidgetState extends State<TaskItemWidget> {
           horizontal: 8.0,
         ),
         child: Column(children: [
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: Checkbox(
-                    value: _checked,
-                    onChanged: (value) {
-                      setState(() {
-                        _checked = true;
-                        Timer timer =
-                            new Timer(new Duration(milliseconds: 450), () {
-                          widget.onItemRemoved();
-                          _checked = false;
-                        });
-                      });
-                    }),
-              ),
-              Expanded(
-                  flex: 10,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.item.name ?? "(Unnamed Task)",
-                        style: TextStyle(
-                            fontSize: 18.0, fontWeight: FontWeight.w500),
-                      ),
-                      widget.item.description.isEmpty
-                          ? Container()
-                          : Text(
-                              widget.item.description,
-                              style:
-                                  TextStyle(fontSize: 15.0, color: Colors.grey),
-                            ),
-                    ],
-                  )),
-              Expanded(
-                flex: 6,
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                      shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(10)))),
-                  onPressed: null,
-                  child: Text(
-                      DateFormat(getDueDateFormat(widget.item.timeframe))
-                          .format(widget.item.dueDate)),
-                ),
-              ),
-            ],
-          ),
+          Dismissible(
+              key: UniqueKey(),
+              onDismissed: (DismissDirection direction) {
+                widget.onTaskDeleted();
+              },
+              background: Container(color: Colors.red),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Checkbox(
+                        value: _checked,
+                        onChanged: (value) {
+                          setState(() {
+                            _checked = true;
+                            Timer timer =
+                                new Timer(new Duration(milliseconds: 450), () {
+                              widget.onTaskCompleted();
+                              _checked = false;
+                            });
+                          });
+                        }),
+                  ),
+                  Expanded(
+                      flex: 10,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.item.name ?? "(Unnamed Task)",
+                            style: TextStyle(
+                                fontSize: 18.0, fontWeight: FontWeight.w500),
+                          ),
+                          widget.item.description.isEmpty
+                              ? Container()
+                              : Text(
+                                  widget.item.description,
+                                  style: TextStyle(
+                                      fontSize: 15.0, color: Colors.grey),
+                                ),
+                        ],
+                      )),
+                  Expanded(
+                    flex: 6,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                          shape: const RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(10)))),
+                      onPressed: null,
+                      child: Text(
+                          DateFormat(getDueDateFormat(widget.item.timeframe))
+                              .format(widget.item.dueDate)),
+                    ),
+                  ),
+                ],
+              )),
           // const Divider(
           //   height: 50,
           //   thickness: 2,
@@ -136,6 +144,7 @@ class TaskListWidget extends StatefulWidget {
 
 class _TaskListWidgetState extends State<TaskListWidget> {
   final GlobalKey<AnimatedListState> listKey = GlobalKey<AnimatedListState>();
+  final List<int> items = [];
 
   Widget _buildItem(
       QueryDocumentSnapshot item, int index, Animation animation) {
@@ -157,13 +166,43 @@ class _TaskListWidgetState extends State<TaskListWidget> {
           .catchError((error) => print("Failed to complete task: $error"));
     }
 
+    Future<void> deleteTask() {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("Task deleted"),
+        action: SnackBarAction(
+          label: "Undo",
+          textColor: Colors.blue,
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            return tasks
+                .add({
+                  'title': item['title'],
+                  'description': item['description'],
+                  'due_date': item['due_date'].toDate(),
+                  'complete': item['complete'],
+                  'recurring': item['recurring']
+                })
+                .then((value) => print('Task added'))
+                .catchError((error) => print("Failed to add task: $error"));
+          },
+        ),
+      ));
+
+      return tasks
+          .doc(item.id)
+          .delete()
+          .then((value) => print('Task deleted'))
+          .catchError((error) => print("Failed to delete task: $error"));
+    }
+
     return SizeTransition(
       axis: Axis.vertical,
       sizeFactor: animation,
       child: TaskItemWidget(
           item: TaskItem(index, item.id, item['title'], item['description'],
               item['due_date'].toDate(), item['complete'], widget.title),
-          onItemRemoved: completeTask),
+          onTaskCompleted: completeTask,
+          onTaskDeleted: deleteTask),
     );
   }
 
@@ -233,12 +272,16 @@ class _TaskListWidgetState extends State<TaskListWidget> {
                   // TODO: Handle this case.
                   break;
                 case DocumentChangeType.removed:
-                  // TODO: Handle this case.
+                  listKey.currentState.removeItem(index, (context, animation) {
+                    return _buildItem(
+                        snapshot.data.docs[index], index, animation);
+                  });
                   break;
               }
               index++;
             }
           }
+
           print(widget.dueDateRange.start);
           print(snapshot.data.docs);
 
