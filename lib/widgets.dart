@@ -229,7 +229,7 @@ class _NewTaskFormWidgetState extends State<NewTaskFormWidget> {
                         _isDescriptionSelected
                             ? _taskDescriptionController.text
                             : "",
-                        DateTime.now(),
+                        _dueDate,
                         _isRecurring);
                   },
                   label: Text('Save'),

@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 
+import 'package:intl/intl.dart';
+
 class TaskItem {
   int index;
   String id;
@@ -9,9 +11,10 @@ class TaskItem {
   String description;
   DateTime dueDate;
   bool complete;
+  String timeframe;
 
   TaskItem(this.index, this.id, this.name, this.description, this.dueDate,
-      this.complete);
+      this.complete, this.timeframe);
 }
 
 class TaskItemWidget extends StatefulWidget {
@@ -33,56 +36,102 @@ class _TaskItemWidgetState extends State<TaskItemWidget> {
     _checked = false;
   }
 
+  String getDueDateFormat(String timeframe) {
+    switch (timeframe) {
+      case "Overdue":
+        return 'M/d, h:mm a';
+        break;
+      case "Today":
+        return 'h:mm a';
+        break;
+      case "This week":
+        return 'E, h:mm a';
+        break;
+      default:
+        return 'MMM d';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
         width: double.infinity,
         padding: EdgeInsets.symmetric(
-          vertical: 22.0,
+          vertical: 20.0,
           horizontal: 8.0,
         ),
-        child: Row(
-          children: [
-            Checkbox(
-                value: _checked,
-                onChanged: (value) {
-                  setState(() {
-                    _checked = true;
-                    Timer timer =
-                        new Timer(new Duration(milliseconds: 450), () {
-                      widget.onItemRemoved();
-                      _checked = false;
-                    });
-                  });
-                }),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.item.name ?? "(Unnamed Task)",
-                  style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.w500),
-                ),
-                widget.item.description.isEmpty
-                    ? Container()
-                    : Text(
-                        widget.item.description,
-                        style: TextStyle(fontSize: 15.0, color: Colors.grey),
+        child: Column(children: [
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Checkbox(
+                    value: _checked,
+                    onChanged: (value) {
+                      setState(() {
+                        _checked = true;
+                        Timer timer =
+                            new Timer(new Duration(milliseconds: 450), () {
+                          widget.onItemRemoved();
+                          _checked = false;
+                        });
+                      });
+                    }),
+              ),
+              Expanded(
+                  flex: 10,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.item.name ?? "(Unnamed Task)",
+                        style: TextStyle(
+                            fontSize: 18.0, fontWeight: FontWeight.w500),
                       ),
-              ],
-            )
-          ],
-        ));
+                      widget.item.description.isEmpty
+                          ? Container()
+                          : Text(
+                              widget.item.description,
+                              style:
+                                  TextStyle(fontSize: 15.0, color: Colors.grey),
+                            ),
+                    ],
+                  )),
+              Expanded(
+                flex: 6,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                      shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(10)))),
+                  onPressed: null,
+                  child: Text(
+                      DateFormat(getDueDateFormat(widget.item.timeframe))
+                          .format(widget.item.dueDate)),
+                ),
+              ),
+            ],
+          ),
+          // const Divider(
+          //   height: 50,
+          //   thickness: 2,
+          //   indent: 20,
+          //   endIndent: 20,
+          // )
+        ]));
   }
 }
 
 class TaskListWidget extends StatefulWidget {
   final String userId;
   final String selectedTaskListId;
+  final DateTimeRange dueDateRange;
+  final String title;
 
   @override
   _TaskListWidgetState createState() => _TaskListWidgetState();
 
-  TaskListWidget({this.userId, this.selectedTaskListId});
+  TaskListWidget(
+      {this.userId, this.selectedTaskListId, this.dueDateRange, this.title});
 }
 
 class _TaskListWidgetState extends State<TaskListWidget> {
@@ -113,13 +162,31 @@ class _TaskListWidgetState extends State<TaskListWidget> {
       sizeFactor: animation,
       child: TaskItemWidget(
           item: TaskItem(index, item.id, item['title'], item['description'],
-              item['due_date'].toDate(), item['complete']),
+              item['due_date'].toDate(), item['complete'], widget.title),
           onItemRemoved: completeTask),
     );
   }
 
+  Color getColorFromTimeFrame(String timeframe) {
+    switch (timeframe) {
+      case "Overdue":
+        return Colors.red.shade400;
+        break;
+      case "Today":
+        return Colors.blue;
+        break;
+      case "This week":
+        return Colors.green;
+        break;
+      default:
+        return Colors.black;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    print(widget.dueDateRange.start);
+    print(widget.dueDateRange.end);
     Query tasks = FirebaseFirestore.instance
         .collection('users')
         .doc(widget.userId)
@@ -127,7 +194,11 @@ class _TaskListWidgetState extends State<TaskListWidget> {
         .doc(widget.selectedTaskListId)
         .collection('tasks')
         .where('complete', isEqualTo: false)
+        .where('due_date', isLessThan: widget.dueDateRange.end)
+        .where('due_date', isGreaterThan: widget.dueDateRange.start)
         .orderBy('due_date');
+
+    print("we made it here");
 
     return StreamBuilder<QuerySnapshot>(
         stream: tasks.snapshots(),
@@ -145,10 +216,7 @@ class _TaskListWidgetState extends State<TaskListWidget> {
           }
 
           if (snapshot.data.docs.isEmpty) {
-            return Container(
-                child: Center(
-              child: Text("You have no current tasks. Add a new task below!"),
-            ));
+            return Container();
           }
 
           print(snapshot.data.docChanges);
@@ -171,20 +239,41 @@ class _TaskListWidgetState extends State<TaskListWidget> {
               index++;
             }
           }
-          print("right here");
+          print(widget.dueDateRange.start);
           print(snapshot.data.docs);
 
-          return Expanded(
-              child: Container(
-                  padding: EdgeInsets.only(top: 30.0),
-                  child: AnimatedList(
-                    key: listKey,
-                    initialItemCount: snapshot.data.docs.length,
-                    itemBuilder: (context, index, animation) {
-                      return _buildItem(
-                          snapshot.data.docs[index], index, animation);
-                    },
-                  )));
+          return Container(
+              padding: EdgeInsets.only(top: 30.0),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                        padding: EdgeInsets.only(left: 22.0),
+                        child: Text(widget.title,
+                            textAlign: TextAlign.left,
+                            style: TextStyle(
+                                fontSize: 22.0,
+                                color: getColorFromTimeFrame(widget.title),
+                                fontWeight: FontWeight.bold))),
+                    AnimatedList(
+                      physics: const NeverScrollableScrollPhysics(),
+                      shrinkWrap: true,
+                      key: listKey,
+                      initialItemCount: snapshot.data.docs.length,
+                      itemBuilder: (context, index, animation) {
+                        return _buildItem(
+                            snapshot.data.docs[index], index, animation);
+                      },
+                    ),
+                    widget.title != "Future"
+                        ? Divider(
+                            height: 0,
+                            thickness: 2,
+                            // indent: 20,
+                            // endIndent: 20,
+                          )
+                        : Container()
+                  ]));
         });
   }
 }
