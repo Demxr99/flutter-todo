@@ -34,7 +34,10 @@ dependencies:
   google_sign_in: ^4.5.3
   cloud_firestore: "^0.16.0+1"
   intl: ^0.16.0
-  firebase_messaging: "^8.0.0-dev.15"
+  flutter_local_notifications: ^4.0.1+2
+  timezone: ^0.6.1
+  flutter_native_timezone: ^1.0.10
+
 
 dev_dependencies:
   flutter_test:

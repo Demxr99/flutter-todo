@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 class TaskListNameItem {
@@ -19,12 +20,6 @@ class DropdownWidget extends StatefulWidget {
 }
 
 class _DropdownWidgetState extends State<DropdownWidget> {
-  List<TaskListNameItem> _dropdownItems = [
-    TaskListNameItem(1, "My Tasks"),
-    TaskListNameItem(2, "Assignments"),
-    TaskListNameItem(3, "Work Tasks"),
-  ];
-
   List<TaskListNameItem> buildDropDownItems(List<QueryDocumentSnapshot> docs) {
     List<TaskListNameItem> dropdownItems = [];
     for (int i = 0; i < docs.length; i++) {
@@ -96,6 +91,12 @@ class _NewTaskFormWidgetState extends State<NewTaskFormWidget> {
   FocusNode _taskDescriptionNode;
   DateTime _dueDate;
   bool _isRecurring;
+  bool _isNotifications;
+  String _selectedTimeFreq;
+  int _selectedTimeAmount;
+  TextEditingController _timeAmountController;
+
+  final List<String> timeFreqList = ['minutes', 'hours', 'days', 'weeks'];
 
   void initState() {
     super.initState();
@@ -106,12 +107,17 @@ class _NewTaskFormWidgetState extends State<NewTaskFormWidget> {
     _isDueDateAdded = false;
     _dueDate = null;
     _isRecurring = false;
+    _isNotifications = false;
+    _selectedTimeFreq = 'hours';
+    _selectedTimeAmount = 0;
+    _timeAmountController = TextEditingController();
   }
 
   void dispose() {
     _taskTitleController.dispose();
     _taskDescriptionController.dispose();
     _taskDescriptionNode.dispose();
+    _timeAmountController.dispose();
     super.dispose();
   }
 
@@ -141,8 +147,85 @@ class _NewTaskFormWidgetState extends State<NewTaskFormWidget> {
     }
   }
 
+  Future<void> _showNotificationsDialog() async {
+    return showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Set Task Reminder'),
+            content: SingleChildScrollView(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(children: [
+                      Container(
+                          width: 50.0,
+                          padding: EdgeInsets.only(right: 8.0),
+                          child: TextField(
+                            controller: _timeAmountController,
+                            autofocus: true,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'[1-9][0-9]*'))
+                            ],
+                          )),
+                      Expanded(
+                          child: DropdownButtonFormField(
+                              value: _selectedTimeFreq,
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedTimeFreq = value;
+                                });
+                              },
+                              items: timeFreqList
+                                  .map(
+                                    (label) => DropdownMenuItem(
+                                      child: Text(label),
+                                      value: label,
+                                    ),
+                                  )
+                                  .toList()))
+                    ]),
+                    Container(
+                        padding: EdgeInsets.only(top: 8.0),
+                        child: Text('before due date.')),
+                  ]),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _timeAmountController.text = _selectedTimeAmount == 0
+                          ? null
+                          : _selectedTimeAmount.toString();
+                    });
+                    Navigator.of(context).pop();
+                  },
+                  child: Text('Cancel')),
+              TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _isNotifications = _timeAmountController.text.isNotEmpty;
+                      _selectedTimeAmount =
+                          _timeAmountController.text.isNotEmpty
+                              ? int.parse(_timeAmountController.text)
+                              : 0;
+                    });
+                    Navigator.of(context).pop();
+                  },
+                  child: Text('Confirm')),
+            ],
+          );
+        });
+  }
+
   @override
   Widget build(BuildContext context) {
+    print(_timeAmountController.text);
+    print(_selectedTimeFreq);
     return Container(
         padding: EdgeInsets.symmetric(horizontal: 22.0),
         child: Column(
@@ -207,7 +290,23 @@ class _NewTaskFormWidgetState extends State<NewTaskFormWidget> {
                                 label: Text(DateFormat('MMM d, h:mm a')
                                     .format(_dueDate))),
                             IconButton(
-                                icon: Icon(Icons.repeat_outlined),
+                                icon: Icon(
+                                  Icons.notification_important_outlined,
+                                  size: 28.0,
+                                ),
+                                color: _isNotifications
+                                    ? Colors.blueAccent
+                                    : Colors.grey,
+                                onPressed: () {
+                                  setState(() {
+                                    _showNotificationsDialog();
+                                  });
+                                }),
+                            IconButton(
+                                icon: Icon(
+                                  Icons.repeat_outlined,
+                                  size: 28,
+                                ),
                                 color: _isRecurring
                                     ? Colors.blueAccent
                                     : Colors.grey,
@@ -230,7 +329,9 @@ class _NewTaskFormWidgetState extends State<NewTaskFormWidget> {
                             ? _taskDescriptionController.text
                             : "",
                         _dueDate,
-                        _isRecurring);
+                        _isRecurring,
+                        _selectedTimeAmount,
+                        _selectedTimeFreq);
                   },
                   label: Text('Save'),
                   icon: Icon(Icons.check),

@@ -1,8 +1,10 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/utils/time_zone_util.dart';
 import 'package:flutter_application_1/widgets.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_application_1/widgets/task_list.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 class PanelItem {
   String timeframe;
@@ -80,14 +82,56 @@ class Homepage extends StatefulWidget {
 
 class _HomepageState extends State<Homepage> {
   int _selectedTaskListIndex;
-  FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  FlutterLocalNotificationsPlugin _fltrNotification;
+  final TimeZone timeZone = TimeZone();
+
+  Future notificationSelected(String payload) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        content: Text("Notification : $payload"),
+      ),
+    );
+  }
+
+  Future _scheduleNotification(DateTime scheduledTime, String taskTitle) async {
+    var androidDetails = new AndroidNotificationDetails(
+        "task_id", "task_reminder", "Channel for task reminders",
+        importance: Importance.max);
+    var iSODetails = new IOSNotificationDetails();
+    var generalNotificationDetails =
+        new NotificationDetails(android: androidDetails, iOS: iSODetails);
+
+    // The device's timezone.
+    String timeZoneName = await timeZone.getTimeZoneName();
+
+    // Find the 'current location'
+    final location = await timeZone.getLocation(timeZoneName);
+
+    final scheduledDate = tz.TZDateTime.from(scheduledTime, location);
+
+    print("notification scheduled");
+    print(scheduledDate);
+
+    await _fltrNotification.zonedSchedule(1, "Task Reminder", taskTitle,
+        scheduledDate, generalNotificationDetails,
+        androidAllowWhileIdle: true,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime);
+  }
 
   void initState() {
     super.initState();
     _selectedTaskListIndex = 0;
+    AndroidInitializationSettings androidInitilize =
+        AndroidInitializationSettings('tick');
+    IOSInitializationSettings iOSinitilize = IOSInitializationSettings();
+    InitializationSettings initilizationSettings =
+        InitializationSettings(android: androidInitilize, iOS: iOSinitilize);
+    _fltrNotification = FlutterLocalNotificationsPlugin();
+    _fltrNotification.initialize(initilizationSettings,
+        onSelectNotification: notificationSelected);
   }
-
-  void _addItem(int index, String value) {}
 
   void onTaskListSelected(int taskListIndex) {
     setState(() {
@@ -128,8 +172,48 @@ class _HomepageState extends State<Homepage> {
               .doc(snapshot.data.docs[_selectedTaskListIndex].id)
               .collection('tasks');
 
-          Future<void> addTask(String title, String description, DateTime date,
-              bool isRecurring) {
+          Future<void> addTask(
+              String title,
+              String description,
+              DateTime date,
+              bool isRecurring,
+              int selectedTimeAmount,
+              String selectedTimeframe) {
+            if (selectedTimeAmount > 0) {
+              DateTime notifDate = DateTime(date.year, date.month, date.day,
+                  date.hour, date.minute, date.second);
+              switch (selectedTimeframe) {
+                case "minutes":
+                  notifDate = DateTime(date.year, date.month, date.day,
+                      date.hour, date.minute - selectedTimeAmount, date.second);
+                  break;
+                case "hours":
+                  notifDate = DateTime(date.year, date.month, date.day,
+                      date.hour - selectedTimeAmount, date.minute, date.second);
+                  break;
+                case "days":
+                  notifDate = DateTime(
+                      date.year,
+                      date.month,
+                      date.day - selectedTimeAmount,
+                      date.hour,
+                      date.minute,
+                      date.second);
+                  break;
+                case "weeks":
+                  notifDate = DateTime(
+                      date.year,
+                      date.month,
+                      date.day - (7 * selectedTimeAmount),
+                      date.hour,
+                      date.minute,
+                      date.second);
+                  break;
+                default:
+                  break;
+              }
+              _scheduleNotification(notifDate, title);
+            }
             return tasks
                 .add({
                   'title': title,
@@ -198,8 +282,13 @@ class _HomepageState extends State<Homepage> {
                     context: context,
                     builder: (BuildContext context) {
                       return NewTaskFormWidget(onFormSubmit: (String title,
-                          String description, DateTime date, bool isRecurring) {
-                        addTask(title, description, date, isRecurring);
+                          String description,
+                          DateTime date,
+                          bool isRecurring,
+                          int selectedTimeAmount,
+                          String selectedTimeframe) {
+                        addTask(title, description, date, isRecurring,
+                            selectedTimeAmount, selectedTimeframe);
                         Navigator.of(context).pop();
                       });
                     });
